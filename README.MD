@@ -1,3 +1,54 @@
+# SORC_ Project Zomboid Dedicated Server
+
+## Operating System
+Ubuntu 20.04.6 LTS with OpenSSH enabled through installation setup, or done manually.
+
+## Basic Security Configuration for Internal Network Access
+
+### Setup Static IP Address
+- Find default gateway via `ip route` command, e.g. `default via 192.168.64.1 dev enp3s1`
+- Identify network interface via `ip a` command, e.g. `eth0`, `eno1`, or `enp3s1`, etc. Find by locating current IP address in list of network interfaces to locate server's interface and take note of it:
+```
+eno1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 192.168.64.231  netmask 255.255.255.0  broadcast 192.168.64.255
+        ...
+```
+⚠️ **NOTE: Everything mentioned above will be different for your specific hardware and configurations.**
+- Configure a static IP address using `Netplan`:
+```
+$ sudo vim /etc/netplan/01-netcfg.yaml
+```
+- Write the following configuration to file (adjusted to desired static IP):
+```
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    eno1:
+      dhcp4: no
+      addresses:
+        - 192.168.64.100/24
+      gateway4: 192.168.64.1
+      nameservers:
+        addresses:
+          - 8.8.8.8
+          - 8.8.4.4
+```
+- Save and apply changes (e.g. will update dynamic `192.168.64.231` to `192.168.64.100` static IP):
+```
+$ sudo netplan apply
+```
+⚠️ **NOTE: This command can result in a failure message but should fall back to using 'systemd-networkd.service' to restart the network daemon. Double check with the 'ip a' command to verify the IP address changed.**
+
+### Setup SSH with Public and Private Keys for Remote Access
+
+
+
+
+# 👇 Original Docs from Forked Repo
+
+---
+
 # Project Zomboid dedicated server container
 
 This Dockerfile downloads the Project Zombie dedicated server using SteamCMD. Will allow you to deploy with ease a server in Kubernetes, Docker...
