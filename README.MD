@@ -41,9 +41,65 @@ $ sudo netplan apply
 ⚠️ **NOTE: This command can result in a failure message but should fall back to using 'systemd-networkd.service' to restart the network daemon. Double check with the 'ip a' command to verify the IP address changed.**
 
 ### Setup SSH with Public and Private Keys for Remote Access
+On local machine that will remote connect to sever, generate ed25519 SSH Key Pair:
+```
+$ ssh-keygen -t ed25519 -C "your_email@example.com"
+```
+- When prompted, name the file anything you want, e.g.: `id_ed25519_sorc-zomboid`
+⚠️**NOTE: It will ask for a passphrase, but this is optional.**
+- Copy or move both the private (`id_ed25519_sorc-zomboid`) and public keys (`id_ed25519_sorc-zomboid.pub`) into a `.ssh` directory in your home directory `~/.ssh` or `C:\Users\<your_user>\.ssh`
+- On Linux, set permissions on private key file so only your user can read ():
+```
+$ chmod 600 ~/.ssh/id_ed25519_sorc-zomboid
+```
+- ⚠️**NOTE: On Windows, you can set permissions to make sure only your user can access, if sharing PC with other individuals.**
 
+On Linux server, create a `~/.ssh` directory with permissions:
+```
+$ mkdir -p ~/.ssh
+$ chmod 700 ~/.ssh
+```
 
+From remote PC, copy public key to Linux server:
+```
+scp -rp C:\Users\<your_windows_user>\.ssh\id_ed25519_sorc-zomboid.pub <linux_user>@<server_ip>:~/.ssh/.
+```
+⚠️**NOTE: You will be asked if you trust the host, say yes.**
+⚠️**NOTE: You will be prompted for the password for the Linux user. Password prompt will be disabled in later steps.**
 
+On Linux server, move public key(s) into an `authorized_keys` directory and rename the public key accordingly:
+```
+$ mkdir ~/.ssh/authorized_keys
+$ mv ~/.ssh/id_ed25519_sorc-zomboid.pub ~/.ssh/authorized_keys/.
+
+# Optionally rename pub key to indicate which remote machine it belongs to, if multiple:
+$ mv ~/.ssh/authorized_keys/id_ed25519_sorc-zomboid.pub ~/.ssh/authorized_keys/id_ed25519_sorc-zomboid_pc1.pub
+
+$ chmod 600 ~/.ssh/authorized_keys
+```
+
+On Linux server, secure SSH configuration and disable password login:
+```
+$ sudo vim /etc/ssh/sshd_config
+
+# Edit or add the following:
+PasswordAuthentication no
+PermitRootLogin no
+PubkeyAuthentication yes
+MaxAuthTries 3
+
+# NOTE: Some lines above exist. Search vim via '/'. Some lines will need to be added, if not existing.
+```
+
+Restart SSH daemon:
+```
+sudo systemctl restart sshd
+```
+
+⚠️**TODO: Stopped here because SSH access denied pub key. Need to add config line to id the authorized_keys
+  dir and place pub key there. Also, need to make note here to add a procedure to remove fail2ban IPs.
+  Actually test this by trying 3 times to login via other device and then manually remove that banned IP from
+  a list somewhere.**
 
 # 👇 Original Docs from Forked Repo
 
