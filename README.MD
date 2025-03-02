@@ -1,9 +1,68 @@
 # SORC_ Project Zomboid Dedicated Server
 
 ## Operating System
-Ubuntu 20.04.6 LTS with OpenSSH enabled through installation setup, or done manually.
+Ubuntu 24.04.2 LTS with OpenSSH enabled through installation setup, or done manually.
 
 ## Basic Security Configuration for Internal Network Access
+
+### Install Updates and Upgrade to Latest Ubuntu LTS Version
+Repeat these commands as necessary until latest version has been installed:
+```
+$ sudo apt update -y && sudo apt upgrade -y
+$ sudo do-release-upgrade
+$ sudo reboot
+
+# rinse and repeat until at latest version
+```
+
+### Free Disk Space in '/boot' for Kernel Upgrades
+Run 'apt autoremove' to run an auto remove of old kernels:
+```
+$ sudo apt autoremove
+```
+
+Set 'COMPRESS' to use 'xz':
+```
+$ sudo vim /etc/initramfs-tools/initramfs.conf
+
+# Edit the COMPRESS field:
+COMPRESS=xz
+```
+
+Manually remove old kernels:
+⚠️**NOTE: Take note of currently installed kernel.**
+```
+$ uname -r
+```
+List installed kernels:
+```
+$ dpkg --list | grep linux-image
+```
+Manually remove old kernels:
+```
+$ sudo apt remove --purge linux-image-<old-version>
+```
+⚠️**NOTE: DO NOT remove the currently installed kernel listed in previous `uname -r` command!**
+
+After removing old kernels, update GRUB:
+```
+$ sudo update-grub
+```
+Regenerate the initramfs to clear up space:
+```
+$ sudo update-initramfs -u
+```
+Check space usage in '/boot':
+```
+$ sudo du -sh /boot/*
+```
+⚠️**NOTE: You can also remove any old initrd.img-* or vmlinuz-* files that don't match your current kernel via `sudo rm -f /boot/initrd.img-<old-version>-generic` etc.**
+
+Clear old package versions:
+```
+$ sudo apt clean
+```
+
 
 ### Setup Static IP Address
 - Find default gateway via `ip route` command, e.g. `default via 192.168.64.1 dev enp3s1`
@@ -13,7 +72,7 @@ eno1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
         inet 192.168.64.231  netmask 255.255.255.0  broadcast 192.168.64.255
         ...
 ```
-⚠️ **NOTE: Everything mentioned above will be different for your specific hardware and configurations.**
+⚠️**NOTE: Everything mentioned above will be different for your specific hardware and configurations.**
 - Configure a static IP address using `Netplan`:
 ```
 $ sudo vim /etc/netplan/01-netcfg.yaml
@@ -38,7 +97,7 @@ network:
 ```
 $ sudo netplan apply
 ```
-⚠️ **NOTE: This command can result in a failure message but should fall back to using 'systemd-networkd.service' to restart the network daemon. Double check with the 'ip a' command to verify the IP address changed.**
+⚠️**NOTE: This command can result in a failure message but should fall back to using 'systemd-networkd.service' to restart the network daemon. Double check with the 'ip a' command to verify the IP address changed.**
 
 ### Setup SSH with Public and Private Keys for Remote Access
 On local machine that will remote connect to sever, generate ed25519 SSH Key Pair:
@@ -67,15 +126,13 @@ scp -rp C:\Users\<your_windows_user>\.ssh\id_ed25519_sorc-zomboid.pub <linux_use
 ⚠️**NOTE: You will be asked if you trust the host, say yes.**
 ⚠️**NOTE: You will be prompted for the password for the Linux user. Password prompt will be disabled in later steps.**
 
-On Linux server, move public key(s) into an `authorized_keys` directory and rename the public key accordingly:
+On Linux server, write public key(s) into an `authorized_keys` file and set permissions:
 ```
-$ mkdir ~/.ssh/authorized_keys
-$ mv ~/.ssh/id_ed25519_sorc-zomboid.pub ~/.ssh/authorized_keys/.
-
-# Optionally rename pub key to indicate which remote machine it belongs to, if multiple:
-$ mv ~/.ssh/authorized_keys/id_ed25519_sorc-zomboid.pub ~/.ssh/authorized_keys/id_ed25519_sorc-zomboid_pc1.pub
-
+$ touch ~/.ssh/authorized_keys
+$ cat ~/.ssh/id_ed25519_sorc-zomboid.pub >> ~/.ssh/authorized_keys
+$ rm ~/.ssh/id_ed25519_sorc-zomboid.pub
 $ chmod 600 ~/.ssh/authorized_keys
+$ chown your_user:your_user ~/.ssh ~/.ssh/authorized_keys
 ```
 
 On Linux server, secure SSH configuration and disable password login:
@@ -86,6 +143,7 @@ $ sudo vim /etc/ssh/sshd_config
 PasswordAuthentication no
 PermitRootLogin no
 PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
 MaxAuthTries 3
 
 # NOTE: Some lines above exist. Search vim via '/'. Some lines will need to be added, if not existing.
@@ -96,10 +154,30 @@ Restart SSH daemon:
 sudo systemctl restart sshd
 ```
 
-⚠️**TODO: Stopped here because SSH access denied pub key. Need to add config line to id the authorized_keys
-  dir and place pub key there. Also, need to make note here to add a procedure to remove fail2ban IPs.
-  Actually test this by trying 3 times to login via other device and then manually remove that banned IP from
-  a list somewhere.**
+On local machine, add SSH private key(s) to Windows `ssh-agent`:
+```
+Set-Service -Name ssh-agent -StartupType Automatic
+Start-Service ssh-agent
+
+ssh-add C:\Users\your_user\.ssh\id_ed25519_sorc-zomboid
+```
+⚠️**NOTE: Run commands via Windows Terminal in Admin mode.**
+
+Finally, connect via: `ssh your_user@192.168.64.100`.
+
+
+### Configure UFW for SSH Access
+```
+$ sudo ufw allow 22/tcp
+$ sudo ufw enable
+$ sudo ufw status
+```
+
+### Install and Configure Fail2Ban
+
+
+
+
 
 # 👇 Original Docs from Forked Repo
 
