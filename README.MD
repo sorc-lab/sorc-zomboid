@@ -1,3 +1,270 @@
+# SORC_ Project Zomboid Dedicated Server
+
+## Operating System
+Ubuntu 24.04.2 LTS with OpenSSH enabled through installation setup, or done manually.
+
+## Basic Security Configuration for Internal Network Access
+
+### Install Updates and Upgrade to Latest Ubuntu LTS Version
+Repeat these commands as necessary until latest version has been installed:
+```
+$ sudo apt update -y && sudo apt upgrade -y
+$ sudo do-release-upgrade
+$ sudo reboot
+
+# rinse and repeat until at latest version
+```
+
+### Free Disk Space in '/boot' for Kernel Upgrades
+Run 'apt autoremove' to run an auto remove of old kernels:
+```
+$ sudo apt autoremove
+```
+
+Set 'COMPRESS' to use 'xz':
+```
+$ sudo vim /etc/initramfs-tools/initramfs.conf
+
+# Edit the COMPRESS field:
+COMPRESS=xz
+```
+⚠️**NOTE: Inside vim, execute `:set number` to see line numbers.**
+
+Manually remove old kernels:
+⚠️**NOTE: Take note of currently installed kernel.**
+```
+$ uname -r
+```
+List installed kernels:
+```
+$ dpkg --list | grep linux-image
+```
+Manually remove old kernels:
+```
+$ sudo apt remove --purge linux-image-<old-version>
+```
+⚠️**NOTE: DO NOT remove the currently installed kernel listed in previous `uname -r` command!**
+
+After removing old kernels, update GRUB:
+```
+$ sudo update-grub
+```
+Regenerate the initramfs to clear up space:
+```
+$ sudo update-initramfs -u
+```
+Check space usage in '/boot':
+```
+$ sudo du -sh /boot/*
+```
+⚠️**NOTE: You can also remove any old initrd.img-* or vmlinuz-* files that don't match your current kernel via `sudo rm -f /boot/initrd.img-<old-version>-generic` etc.**
+
+Clear old package versions:
+```
+$ sudo apt clean
+```
+
+
+### Setup Static IP Address
+- Find default gateway via `ip route` command, e.g. `default via 192.168.64.1 dev enp3s1`
+- Identify network interface via `ip a` command, e.g. `eth0`, `eno1`, or `enp3s1`, etc. Find by locating current IP address in list of network interfaces to locate server's interface and take note of it:
+```
+eno1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 192.168.64.231  netmask 255.255.255.0  broadcast 192.168.64.255
+        ...
+```
+⚠️**NOTE: Everything mentioned above will be different for your specific hardware and configurations.**
+Configure a static IP address using `Netplan`:
+```
+$ sudo vim /etc/netplan/01-netcfg.yaml
+```
+Write the following configuration to file (adjusted to desired static IP):
+```
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    eno1:
+      dhcp4: no
+      addresses:
+        - 192.168.64.100/24
+      gateway4: 192.168.64.1
+      nameservers:
+        addresses:
+          - 8.8.8.8
+          - 8.8.4.4
+```
+Save and apply changes (e.g. will update dynamic `192.168.64.231` to `192.168.64.100` static IP):
+```
+$ sudo netplan apply
+```
+⚠️**NOTE: This command can result in a failure message but should fall back to using 'systemd-networkd.service' to restart the network daemon. Double check with the 'ip a' command to verify the IP address changed.**
+Finally, configure your router to hand out static IP to the specific network hardware.
+
+### Setup SSH with Public and Private Keys for Remote Access
+On local machine that will remote connect to sever, generate ed25519 SSH Key Pair:
+```
+$ ssh-keygen -t ed25519 -C "your_email@example.com"
+```
+- When prompted, name the file anything you want, e.g.: `id_ed25519_sorc-zomboid`
+⚠️**NOTE: It will ask for a passphrase, but this is optional.**
+- Copy or move both the private (`id_ed25519_sorc-zomboid`) and public keys (`id_ed25519_sorc-zomboid.pub`) into a `.ssh` directory in your home directory `~/.ssh` or `C:\Users\<your_user>\.ssh`
+
+On Linux, set permissions on private key file so only your user can read ():
+```
+$ chmod 600 ~/.ssh/id_ed25519_sorc-zomboid
+```
+⚠️**NOTE: On Windows, you can set permissions to make sure only your user can access, if sharing PC with other individuals.**
+
+On Linux server, create a `~/.ssh` directory with permissions:
+```
+$ mkdir -p ~/.ssh
+$ chmod 700 ~/.ssh
+```
+
+From remote PC, copy public key to Linux server:
+```
+scp -rp C:\Users\<your_windows_user>\.ssh\id_ed25519_sorc-zomboid.pub <linux_user>@<server_ip>:~/.ssh/.
+```
+⚠️**NOTE: You will be asked if you trust the host, say yes.**
+⚠️**NOTE: You will be prompted for the password for the Linux user. Password prompt will be disabled in later steps.**
+
+On Linux server, write public key(s) into an `authorized_keys` file and set permissions:
+```
+$ touch ~/.ssh/authorized_keys
+$ cat ~/.ssh/id_ed25519_sorc-zomboid.pub >> ~/.ssh/authorized_keys
+$ rm ~/.ssh/id_ed25519_sorc-zomboid.pub
+$ chmod 600 ~/.ssh/authorized_keys
+$ chown your_user:your_user ~/.ssh ~/.ssh/authorized_keys
+```
+
+On Linux server, secure SSH configuration and disable password login:
+```
+$ sudo vim /etc/ssh/sshd_config
+
+# Edit or add the following:
+PasswordAuthentication no
+PermitRootLogin no
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+MaxAuthTries 3
+
+# NOTE: Some lines above exist. Search vim via '/'. Some lines will need to be added, if not existing.
+```
+
+Restart SSH daemon:
+```
+sudo systemctl restart sshd
+```
+
+On local machine, add SSH private key(s) to Windows `ssh-agent`:
+```
+Set-Service -Name ssh-agent -StartupType Automatic
+Start-Service ssh-agent
+
+ssh-add C:\Users\your_user\.ssh\id_ed25519_sorc-zomboid
+```
+⚠️**NOTE: Run commands via Windows Terminal in Admin mode.**
+
+Finally, connect via: `ssh your_user@192.168.64.100`.
+
+### Configure UFW for SSH Access
+```
+$ sudo ufw allow 22/tcp
+$ sudo ufw enable
+$ sudo ufw status
+```
+
+### Limit SSH Public Key Attempts and Whitelist IPs
+Each attempt to make an SSH handshake with public and private keys should be limited to prevent a DDOS attack via flooding the server with pub key login attempts:
+```
+$ sudo ufw limit ssh
+```
+⚠️**NOTE: This command will limit SSH connections to 6 attempts within 30 seconds.**
+
+Add IP address whitelist to limit access to known machines or VPN. Use the following commands to configure as needed:
+```
+# issue an ip ban
+sudo ufw deny from <IP_ADDRESS>
+
+# remove ip ban
+sudo ufw delete deny from <IP_ADDRESS>
+
+# whitelist an ip
+$ sudo ufw allow from <IP_ADDRESS>
+
+# specifically whitelist for port 22 is ideal
+$ sudo ufw allow from <IP_ADDRESS> to any port 22
+
+# remove a whitelisted ip
+sudo ufw delete allow from <IP_ADDRESS>
+```
+⚠️**NOTE: This is a redundant configuration, but necessary. The whitelisted IPs can only access, but guarantees even white listed IPs cannot DDOS or brute force a public key. This config also ensures even whitelisted IPs require an authorized public key.**
+
+Ensure that blacklisted IPs are at the top of the rule list:
+```
+$ sudo ufw status numbered
+
+# remove any rules by number
+$ sudo ufw delete <rule_number>
+
+$ sudo ufw reload
+```
+⚠️**NOTE: UFW rules work sequentially. So if you have port 22 with limited access as rule #1, and a blacklisted ip as rule #2, the blacklist ip will be able to have limited access to port 22. However, making the blacklisted ip as first rule, it will not have ANY access.**
+
+Ideal UFW setup:
+```
+Rule 1: Whitelisted IPs for port 22 access (SSH), ideally this would be one IP address for a VPN connection.
+Rule 2: Limited access to port 22 (limits SSH connections to 6 attempts within 30 seconds of each)
+Rule 3: Allow Zomboid game ports
+Rule 4: Router/gateway ALLOW OUT (lets the server communicate out to public)
+Rule 5: DENY OUT for 192.168.64.0/24 (disallows game server to communicate with other network devices)
+
+NOTE: Only rule 1 & 2 discussed so far. More rules will be added in later sections.
+NOTE: Black listing IPs will be discussed later, as it will be handled outside of UFW firewall, most likely.
+
+TODO: Come back to this section with actual commands to enter in specific order once all figured out.
+TODO: Add section right after this one that explains blacklisting large lists of IP addrs.
+TODO: Rename this section's title b/c it will be more than just whitelisting... etc.
+TODO: Next section 'Disallow server from comms. etc can be absorbed into here.
+```
+
+### Disallow Server from Communicating with Other Network Devices
+```
+$ sudo ufw deny out to 192.168.10.0/24
+```
+⚠️**NOTE: This will deny the server access to anything on the internal network range for 192.168.10.x.**
+
+Allow traffic out to router and wide internet:
+```
+$ sudo ufw allow out to 192.168.10.1
+```
+⚠️**TODO: Refer to internal notes for zomboid server to review and finalize a UFW rule order, and test.**
+
+
+### Basic Monitoring Tools
+Install Glances:
+```
+$ sudo apt update -y && sudo apt upgrade -y
+$ sudo apt  install glances
+
+# run glances w/ flag to read CPU temperature sensors, if applicable (recommended).
+$ glances --enable-plugin sensors
+
+TODO: Add the `tail -f` command to tail and monitor zomboid server logs.
+```
+
+Some things to consider with temperate:
+- Normal operating temperature: **35°C** to **50°C** is ideal for the CPU cores, and your current temperature of 35-40°C is perfectly fine.
+- Warning temperature: If the CPU temperature **rises above 60°C**, it starts to get into a cautionary range, but it's still within safe limits.
+- **Thermal throttling starts at around 80°C**, meaning the CPU will automatically reduce its clock speed to prevent overheating, which may affect performance.
+- Critical temperature: **85°C is the maximum safe temperature** for most CPUs. If it exceeds this, the system may shut down or become unstable to prevent hardware damage.
+
+
+---
+# 👇 Original Docs from Forked Repo Below
+---
+
 # Project Zomboid dedicated server container
 
 This Dockerfile downloads the Project Zombie dedicated server using SteamCMD. Will allow you to deploy with ease a server in Kubernetes, Docker...
