@@ -261,11 +261,156 @@ Some things to consider with temperate:
 - Critical temperature: **85°C is the maximum safe temperature** for most CPUs. If it exceeds this, the system may shut down or become unstable to prevent hardware damage.
 
 
----
-# 👇 Original Docs from Forked Repo Below
----
+## Basic Zomboid Container Setup with Backup and Restore Tasks
+This section will be edited heavily in the future. For now, this just gets a docker container setup with a manual procedure to backup and restore the image. **This setup is not production ready and is just for testing purposes.**
 
-# Project Zomboid dedicated server container
+
+### Clone 'sorc-zomboid' GitHub Repository
+```
+$ git clone https://github.com/sorc-lab/sorc-zomboid.git
+$ cd sorc-zomboid
+```
+
+### Install Docker
+Update your package list:
+```
+$ sudo apt update
+```
+Install dependencies (if not already installed):
+```
+$ sudo apt install apt-transport-https ca-certificates curl software-properties-common
+```
+Add Docker's official GPG key:
+```
+$ curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+```
+Set up the Docker stable repository:
+```
+$ echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+```
+Update your package list again:
+```
+$ sudo apt update
+```
+Install Docker Engine:
+```
+$ sudo apt install docker-ce docker-ce-cli containerd.io
+```
+Start Docker and enable it to run at startup:
+```
+$ sudo systemctl start docker
+$ sudo systemctl enable docker
+```
+Verify Docker installation:
+```
+$ sudo docker --version
+$ sudo docker run hello-world
+```
+This will verify that Docker is installed and running correctly.
+
+### Install Docker Compose
+Install the latest stable release of Docker Compose using the recommended method:
+```
+$ sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+```
+Make the binary executable:
+```
+$ sudo chmod +x /usr/local/bin/docker-compose
+```
+Verify Docker Compose installation:
+```
+$ docker-compose --version
+```
+
+### (Optional) Manage Docker as a non-root user
+Create the Docker group (if it doesn't exist):
+```
+$ sudo groupadd docker
+```
+Add your user to the Docker group:
+```
+$ sudo usermod -aG docker $USER
+```
+Log out and back in to apply the group membership.
+Test by running Docker commands without sudo:
+```
+$ docker ps
+```
+
+### Final Docker Verification
+Check Docker version:
+```
+$ docker --version
+```
+Check Docker Compose version:
+```
+$ docker-compose --version
+```
+
+### (Optional) Create Docker Compose 'dc' Alias
+Add alis to ~/.bashrc:
+```
+$ sudo vim ~/.bashrc
+$ alias dc='docker-compose'
+
+# save the file, quit vim and source bashrc
+$ source ~/.bashrc
+
+# test alias
+$ dc version
+
+# NOTE: Use `echo $SHELL` to see if running BASH or ZSH. This guide is for vanilla '/bin/bash' shell.
+```
+
+### Run and Test the Zomboid Container
+```
+$ cd ~/sorc-zomboid
+
+# build and run zomboid server container and tail the logs, monitoring its progress
+# NOTE: The '-d' flag will run container as daemon in the background.
+#   Press 'Ctrl + C' to exit tailing logs.
+$ dc up -d && dc logs -f
+```
+
+⚠️**NOTE: As of writing this doc, the docker-compose file has a 'version' defined in the yaml file that needs to be commented out. This is obsolete in new versions of docker-compose:**
+```
+#version: "3.7"
+services:
+  ProjectZomboidDedicatedServer:
+    image: danixu86/project-zomboid-dedicated-server:latest
+```
+
+Copy the `.env.template` file and attempt to build/start the container:
+```
+$ cp .env.template .env
+$ dc up -d && dc logs -f
+```
+
+
+### Expose UDP Ports via UFW Firewall
+This is not necessary if hosting on internal network.
+
+
+### Server Backup and Restore Procedure
+TODO: https://wiki.indifferentbroccoli.com/ProjectZomboid/RestoreBackups
+TODO: https://www.reddit.com/r/projectzomboid/comments/thj322/how_does_one_restore_a_backup/
+TODO: SORC_ dir internal notes and history.
+
+Based on wiki, you can set number of backups to store. It will store 5 backups by default, and will automatically create a .zip backup every time the server restarts.
+
+Do weekly server restarts and backup. Store weekly backups up to 1 year. Backups are about 326MB but should grow over time. Rough estimate on disk size for 52 backups per year:
+`326MB × 52 ≈ 16.56GB`
+
+TODO: Write a cron job that will warn players 10mins in advance to find a safe place to logout. Runs a countdown from 10mins every minute until server reboot.
+TODO: Write cron job that backs up the zip archive to an external USB drive and runs validation checks on success.
+
+NOTE: It is still advisable to set the auto-save to every 10mins to make sure players logged in are saving game state every 10mins vs. on player logout.
+
+TODO: Test a full system restore from fresh container with full restore procedure. Document procedure.
+TODO: Write restore automation script.
+
+
+# Project Zomboid dedicated server container (ORIGINAL DOCS FROM FORKED REPO)
 
 This Dockerfile downloads the Project Zombie dedicated server using SteamCMD. Will allow you to deploy with ease a server in Kubernetes, Docker...
 
