@@ -15,6 +15,12 @@ $ sudo reboot
 # rinse and repeat until at latest version
 ```
 
+### If OLD Ubuntu 16
+The default eth setup may need a "kick", aka "Try to manually get a DHCP address"
+`$ ip addr show <YOUR_INTERFACE e.g. enp3s0>`
+`$ sudo dhclient -v <YOUR_INTERFACE>`
+`$ ping www.google.com` --> Test if working
+
 ### Free Disk Space in '/boot' for Kernel Upgrades
 Run 'apt autoremove' to run an auto remove of old kernels:
 ```
